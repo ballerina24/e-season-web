@@ -1,35 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
 
-export async function GET(req: NextRequest) {
-    const { searchParams } = new URL(req.url);
-    const destination = searchParams.get('destination');
-    const trainType = searchParams.get('trainType');
-    const date = searchParams.get('date');
+export async function POST(req: NextRequest) {
+    const { startStation, endStation, searchDate } = await req.json();
+
+    if (!startStation || !endStation || !searchDate) {
+        return NextResponse.json({ error: 'Missing required parameters' }, { status: 400 });
+    }
 
     try {
-        const response = await fetch(`https://www.dumriya.com/api/trains`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                destination,
-                trainType,
-                date,
-            }),
+        const response = await axios.post('https://trainschedule.lk/backend-endpoint', {
+            drStartStation: startStation,
+            drEndStation: endStation,
+            SearchDate: searchDate,
         });
 
-        if (!response.ok) {
-            throw new Error(`Error fetching train data: ${response.statusText}`);
-        }
+        const $ = cheerio.load(response.data);
 
-        const data = await response.json();
-        return NextResponse.json(data, { status: 200 });
-    } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        const schedules: { trainName: string; startTime: string; endTime: string; duration: string }[] = [];
+        $('table#schedule-table > tbody > tr').each((_index, element) => {
+            const trainName = $(element).find('td.train-name').text().trim();
+            const startTime = $(element).find('td.start-time').text().trim();
+            const endTime = $(element).find('td.end-time').text().trim();
+            const duration = $(element).find('td.duration').text().trim();
+
+            schedules.push({ trainName, startTime, endTime, duration });
+        });
+
+        return NextResponse.json(schedules, { status: 200 });
+    } catch (error) {
+        console.error(error);
+        return NextResponse.json({ error: 'Failed to fetch train schedules' }, { status: 500 });
     }
 }
-
-export const config = {
-    runtime: 'experimental-edge',
-};

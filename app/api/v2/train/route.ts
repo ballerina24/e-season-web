@@ -10,27 +10,47 @@ export async function POST(req: NextRequest) {
     }
 
     try {
-        const response = await axios.post('https://trainschedule.lk/backend-endpoint', {
-            drStartStation: startStation,
-            drEndStation: endStation,
-            SearchDate: searchDate,
+        // Construct the URL dynamically based on user input
+        const url = `https://trainschedule.lk/schedule/${startStation.toLowerCase()}-to-${endStation.toLowerCase()}-train-timetable`;
+
+        // Fetch the page HTML
+        const { data } = await axios.get(url);
+
+        // Load the HTML into cheerio
+        const $ = cheerio.load(data);
+
+        // Array to hold train schedule data
+        const schedules: Array<{
+            departure: string;
+            arrival: string;
+            duration: string;
+            trainEnd: string;
+            trainNumber: string;
+        }> = [];
+
+        // Select and parse the rows of the table
+        $('table > tbody > tr').each((_index, element) => {
+            const departure = $(element).find('td:nth-child(1)').text().trim();
+            const arrival = $(element).find('td:nth-child(2)').text().trim();
+            const duration = $(element).find('td:nth-child(3)').text().trim();
+            const trainEnd = $(element).find('td:nth-child(4)').text().trim();
+            const trainNumber = $(element).find('td:nth-child(5) a').text().trim();
+
+            if (departure && arrival && duration && trainEnd && trainNumber) {
+                schedules.push({
+                    departure,
+                    arrival,
+                    duration,
+                    trainEnd,
+                    trainNumber,
+                });
+            }
         });
 
-        const $ = cheerio.load(response.data);
-
-        const schedules: { trainName: string; startTime: string; endTime: string; duration: string }[] = [];
-        $('table#schedule-table > tbody > tr').each((_index, element) => {
-            const trainName = $(element).find('td.train-name').text().trim();
-            const startTime = $(element).find('td.start-time').text().trim();
-            const endTime = $(element).find('td.end-time').text().trim();
-            const duration = $(element).find('td.duration').text().trim();
-
-            schedules.push({ trainName, startTime, endTime, duration });
-        });
-
+        // Return the scraped data
         return NextResponse.json(schedules, { status: 200 });
     } catch (error) {
-        console.error(error);
+        console.error('Error fetching train schedules:', error);
         return NextResponse.json({ error: 'Failed to fetch train schedules' }, { status: 500 });
     }
 }

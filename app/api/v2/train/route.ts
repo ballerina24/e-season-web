@@ -1,38 +1,25 @@
+import { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
-import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
-    const { startStationID, endStationID, startTime, endTime, searchDate } = await req.json();
+const fetchTrainTimes = async (startLocation: string, destination: string, date: string) => {
+    const response = await axios.get("https://api.dumriya.com/train-times", {
+        params: { start: startLocation, destination, date },
+    });
+    return response.data;
+};
 
-    if (!startStationID || !endStationID || !searchDate) {
-        return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const { start, destination, date } = req.query;
+
+    if (typeof start !== 'string' || typeof destination !== 'string' || typeof date !== 'string') {
+        res.status(400).json({ error: "Invalid query parameters" });
+        return;
     }
 
     try {
-        const response = await axios.post(
-            'https://eservices.railway.gov.lk/schedule/searchTrain.action',
-            new URLSearchParams({
-                'searchCriteria.startStationID': startStationID,
-                'searchCriteria.endStationID': endStationID,
-                'searchCriteria.startTime': startTime || '',
-                'searchCriteria.endTime': endTime || '',
-                'searchCriteria.searchDate': searchDate,
-                lang: 'en',
-            }).toString(),
-            {
-                headers: {
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                },
-            }
-        );
-
-        return NextResponse.json({ data: response.data });
+        const data = await fetchTrainTimes(start, destination, date);
+        res.status(200).json(data);
     } catch (error) {
-        const errorMessage = (error as Error).message;
-        return NextResponse.json({ error: 'Failed to fetch train schedules', details: errorMessage }, { status: 500 });
+        res.status(500).json({ error: "Failed to fetch train times" });
     }
-}
-
-export async function GET() {
-    return NextResponse.json({ error: 'Method not allowed' }, { status: 405 });
 }
